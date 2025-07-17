@@ -1,0 +1,23 @@
+{
+  "AWSEBDockerrunVersion": 1,
+  "Image": {
+    "Name": "your-aws-account-id.dkr.ecr.your-region.amazonaws.com/commuter-backend:latest",
+    "Update": "true"
+  },
+  "Ports": [
+    {
+      "ContainerPort": "5000"
+    }
+  ],
+  "Logging": "/var/log/flask",
+  "Authentication": {
+    "Bucket": "",
+    "Key": ""
+  },
+  "Environment": [
+    { "Name": "FLASK_ENV", "Value": "production" },
+    { "Name": "MONGO_URI", "Value": "__MONGO_URI__" },           // Use _only_ for non-sensitive or placeholder - override from web console/prod
+    { "Name": "MONGO_DB", "Value": "commuter_service" },
+    { "Name": "JWT_SECRET", "Value": "__JWT_SECRET__" }
+  ]
+}

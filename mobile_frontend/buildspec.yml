@@ -1,0 +1,42 @@
+# buildspec.yml for Flutter mobile_frontend CI/CD (Android + iOS build)
+
+version: 0.2
+
+env:
+  variables:
+    FLUTTER_CHANNEL: "stable"
+
+phases:
+  install:
+    runtime-versions:
+      java: corretto11
+    commands:
+      - echo "Installing Flutter SDK & dependencies..."
+      - git clone https://github.com/flutter/flutter.git -b $FLUTTER_CHANNEL
+      - export PATH="$PATH:`pwd`/flutter/bin"
+      - flutter --version
+      - flutter pub get
+  pre_build:
+    commands:
+      - echo "Pre-build: Optionally Run lint/test here"
+      - flutter analyze
+      - flutter test
+  build:
+    commands:
+      - echo "Build Android .apk/.aab"
+      - flutter build apk --release
+      - flutter build appbundle --release
+      - echo "Build iOS .ipa (on macOS runners only)"
+      - '[ "$CODEBUILD_BUILD_IMAGE" != "aws/codebuild/standard:7.0" ] && flutter build ios --release || echo "iOS build skipped (not macOS)"'
+  post_build:
+    commands:
+      - mkdir -p build_artifacts
+      - cp -r build/app/outputs/* build_artifacts/ || echo "No build outputs copied"
+artifacts:
+  files:
+    - build_artifacts/**/*
+
+cache:
+  paths:
+    - .pub-cache
+    - build/

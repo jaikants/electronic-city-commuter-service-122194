@@ -1,0 +1,118 @@
+# AWS CodePipeline definition for Flask backend (Elastic Beanstalk or ECS) with secure secret retrieval and artifact handling.
+# Requires creation of AWS CodePipeline, CodeBuild, and optionally S3/ECR/EB resources.
+# For reference/documentation only – set up via AWS Console or CloudFormation per your environment.
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "CodePipeline & CodeBuild for Flask backend CI/CD, with secure secrets."
+
+Parameters:
+  ArtifactBucket:
+    Type: String
+    Description: S3 bucket for build artifacts (pre-created, e.g., codepipeline-artifacts-yourteam)
+  ApplicationName:
+    Type: String
+    Description: Elastic Beanstalk application name
+  EnvironmentName:
+    Type: String
+    Description: Elastic Beanstalk environment name
+
+Resources:
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [codepipeline.amazonaws.com]
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: codepipeline-cicd-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                  - codebuild:*
+                  - elasticbeanstalk:*
+                  - secretsmanager:GetSecretValue
+                  - cloudformation:*
+                Resource: "*"
+
+  CodeBuildBackendProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: backend-build
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref "AWS::Region"
+      ServiceRole: !GetAtt CodePipelineRole.Arn
+      Source:
+        Type: CODEPIPELINE
+      Cache:
+        Type: NO_CACHE
+      TimeoutInMinutes: 30
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: backend-pipeline
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection # or use GitHub, CodeCommit
+                Version: '1'
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                ConnectionArn: <YOUR-CODESTAR-CONN-ARN>
+                FullRepositoryId: <owner/repo>
+                BranchName: main
+        - Name: Build
+          Actions:
+            - Name: BuildBackend
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+              Configuration:
+                ProjectName: !Ref CodeBuildBackendProject
+        - Name: Deploy
+          Actions:
+            - Name: DeployToEB
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: ElasticBeanstalk
+                Version: '1'
+              InputArtifacts:
+                - Name: BuildOutput
+              Configuration:
+                ApplicationName: !Ref ApplicationName
+                EnvironmentName: !Ref EnvironmentName
+
+Outputs:
+  BackendPipelineName:
+    Value: !Ref Pipeline
+    Description: CodePipeline name for backend
