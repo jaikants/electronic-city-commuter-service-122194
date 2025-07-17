@@ -1,0 +1,36 @@
+# buildspec.yml for Flask backend with secret retrieval, test, and deployment artifact creation
+
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - echo "Installing dependencies..."
+      - pip install --upgrade pip
+      - pip install -r requirements.txt
+      - pip install pytest awscli
+  pre_build:
+    commands:
+      - echo "Fetching secrets from AWS Secrets Manager..."
+      # Example: Replace secret id with your real one, and map to backend env vars
+      - export SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id /backend/production/env | jq -r '.SecretString')
+      - export MONGO_URI=$(echo $SECRET_JSON | jq -r '.MONGO_URI')
+      - export JWT_SECRET=$(echo $SECRET_JSON | jq -r '.JWT_SECRET')
+      - export FLASK_ENV=production
+      - echo "Secrets loaded"
+      - echo "Running tests..."
+      - pytest tests/
+  build:
+    commands:
+      - echo "Zipping backend for deployment..."
+      - zip -r ../backend-deploy.zip . -x "tests/*"
+  post_build:
+    commands:
+      - echo "Build complete. Artifact ready."
+artifacts:
+  files:
+    - ../backend-deploy.zip
+  discard-paths: yes
+  base-directory: .
